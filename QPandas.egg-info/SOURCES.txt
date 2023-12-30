@@ -1,0 +1,9 @@
+README.md
+setup.py
+QPandas/__init__.py
+QPandas/qframe.py
+QPandas/qseries.py
+QPandas.egg-info/PKG-INFO
+QPandas.egg-info/SOURCES.txt
+QPandas.egg-info/dependency_links.txt
+QPandas.egg-info/top_level.txt
