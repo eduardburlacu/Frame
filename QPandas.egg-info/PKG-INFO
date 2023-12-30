@@ -2,3 +2,4 @@ Metadata-Version: 2.1
 Name: QPandas
 Version: 0.20
 Author: Eduard Burlacu
+Requires-Python: >=3.9.17

@@ -7,6 +7,8 @@ from collections import OrderedDict
 from QPandas.qseries import QSeries
 from copy import deepcopy
 import warnings
+from IPython.display import display,HTML
+import plotly.graph_objects as go
 from typing import (
     Union,
     Dict,
@@ -16,6 +18,7 @@ __all__= ["QFrame"]
 
 class QFrame:
     _HANDLED_TYPES=(Dict, OrderedDict)
+    HTML:bool = False
 
     def __init__(
             self,
@@ -24,6 +27,14 @@ class QFrame:
             columns=None,
             make_copy=True
     ):
+        """
+        :param data: Dictionary column_name:str -> series:QSeries
+        :param index: List with dataframe indexes. If missing, it is inferred from data.
+        If data indexing is inconsistent, it uses the range indexing.
+        :param columns: List with dataframe indexes. If missing, it is inferred from data keys.
+        :param make_copy: If true, the df builts new series. Otherwise, it uses the series from
+        the dict provided.
+        """
         self._index_from_data=False
         self._columns_from_data=False
         self._shape= (0, 0)
@@ -86,6 +97,7 @@ class QFrame:
         self._shape = (len(ref),len(data))
     @staticmethod
     def _idx_checks(data):
+        # Determine if all series share the same index
         if len(data)==0:
             return False
         ref=list(data.values())[0].index
@@ -94,13 +106,34 @@ class QFrame:
                 return False
         return True
 
+    def render(self):
+        """
+        Use a specialized table visualisation tool. Only work within Jupyter Notebooks. To allow rendering:
+        QFrame.HTML=True
+        df.render()
+        """
+        if QSeries.HTML:
+            head=[f"{ser.name}({ser.type})"for ser in self.data.values()]
+            table = go.Figure(data=[go.Table(
+                header={"values": ["Idx", *self.columns],"fill_color":'lightblue', "align":'center'},
+                cells={"values": [self.index, *[self[col].values for col in self.columns]],
+                       "fill_color": 'lavender', "align": 'center'},
+            )],)
+            table.update_layout(
+                margin=dict(l=20, r=20, t=20, b=20),
+                paper_bgcolor="LightSteelBlue",
+            )
+            display(HTML(table.to_html(full_html=True)))
+        else:
+            warnings.warn("Rendering only possible when using Jupyter Notebook")
+
     def __repr__(self):
         out = "\n __________________________________\n| Idx "
         for col in self.columns:
             out = out + f"| {col} "
         out =out + "|\n __________________________________\n|     "
         for ser in self.data.values():
-            out = out + f"| {str(ser.dtype)} "
+            out = out + f"| {str(ser.type)} "
         out =out + "|\n __________________________________\n"
         for id in range(len(self.index)):
             current=f"|  {self.index[id]}  "
@@ -127,6 +160,14 @@ class QFrame:
         return self._columns_from_data
 
     def __getitem__(self, item):
+        """
+
+        :param item:
+            - If item is int, it returns the (i+1)th element in the series(irrespective of indexing names)
+            - If item is tuple(i:int,c:str) it returns the element on (i+1)th row in column c
+            - If item is a boolean QSeries, it returns a new QFrame with all the entries from the
+            original frame that correspond to True in the condition series
+        """
         if isinstance(item,str):
             try:
                 return self.data[item]

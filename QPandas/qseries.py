@@ -1,10 +1,12 @@
-""""
+"""
 This series reimplementation has the API consistent with the original Series
 (see https://pandas.pydata.org/docs/reference/api/pandas.Series.html)
 """
 from collections.abc import Hashable
 from collections import OrderedDict
 import warnings
+from IPython.display import display,HTML
+import plotly.graph_objects as go
 from typing import (
     List,
     Union,
@@ -17,25 +19,24 @@ __all__= ["QSeries"]
 
 class QSeries:
     _HANDLED_INPUT_TYPES=(List,Tuple,Dict,OrderedDict)
-    _HANDLED_ELEMENT_ACCESS=("python_std","in_range","cyclic")
     _HANDLED_DTYPES=(float,int,str,bool)
     _NAME: Hashable
+    HTML:bool = False
+
     """
-    :param none_equality(bool) : If set to True, comparisons between None and None will
+    :param allow_none_equality(bool) : If set to True, == between None and None will
      always yield True(warning raised).
     If set to False, comparisons between None types yield None. 
     
-    :param allow_none_comparison(bool) : If set to True, comparisons between None and 
+    :param allow_none_comparison(bool) : If set to True, inequalities between None and 
     other type will always yield False.
     If set to False, comparisons with None type will yield None.
-    
-    :param check_names_for_equality(bool) : If set to True, the == operator also checks 
-    whether the series have the same name attribute.
     """
+    allow_none_equality = False
     allow_none_comparison=False
-    allow_none_equality=False
-    check_names_for_equality=False
+    # See the code for __get_item__
     element_access:Literal["python_std","in_range","circular"] ="python_std"
+
     def __init__(
             self,
             data:Union[Dict,OrderedDict,List,Tuple]= None,
@@ -43,6 +44,15 @@ class QSeries:
             dtype= None,
             name=None,
     ):
+        """
+        :param data: Usually initialized using Lists. Values of series considered.
+         Must be of unique datatype or None for missing values.
+        :param index: List with Series indexes. If missing, the range indexing is used.
+        :param dtype: One of the entries in _HANDLED_DTYPES.
+        Operations are strictly between Series of identical dtype.
+        :param name: String used for hashing purposes in a QFrame
+        if the columns are not provided
+        """
         self.set_name(name)
         self.index=None
         self.values=None
@@ -55,6 +65,7 @@ class QSeries:
             index:Union[List,Tuple]=None,
             dtype: Union[str,None]  = None,
     ):
+        # Initializer function for dictionary data entries
         cdata=data.copy()
         keys = list(cdata.keys())
         vals = list(cdata.values())
@@ -93,7 +104,7 @@ class QSeries:
             index:Union[List,Tuple],
             dtype: Union[str, None]  = None,
     ):
-
+        # Initializer function for list data entries
         cdata=data.copy()
         #Indexing checks
         if index is not None and self._check_type(index, Hashable)==0:
@@ -134,6 +145,7 @@ class QSeries:
             raise NotImplementedError("Data type not supported yet")
 
     def set_name(self,name:str):
+        # Can be overriden as well.
         if isinstance(name, Hashable):
             if name is not None:
                 self.name = name
@@ -143,10 +155,24 @@ class QSeries:
         else:
             raise AttributeError("Series name is not hashable")
 
+
+    def type(self):
+        if self.dtype==int:
+            return "int"
+        elif self.dtype==float:
+            return "float"
+        elif self.dtype==bool:
+            return "bool"
+        elif self.dtype==str:
+            return "str"
+        else:
+            raise TypeError("Invalid dtype.")
     @staticmethod
     def _check_type(item, dtype, allow_none=False):
+        # Method for checking an item has the requested dtype.
         if isinstance(dtype,(tuple,list)):
             checker = (*dtype,type(None))
+            # This ensures True/False entries are not considered int
             if bool not in dtype:
                 if any([isinstance(element, bool) for element in item]):
                     raise AttributeError(f"Data argument passed with inconsistent data type, requested as {dtype}")
@@ -155,7 +181,6 @@ class QSeries:
             if dtype!=bool:
                 if any([isinstance(element, bool) for element in item]):
                     raise AttributeError(f"Data argument passed with inconsistent data type, requested as {dtype}")
-
 
         if allow_none and not all([isinstance(element, checker) for element in item]):
             raise AttributeError(f"Data argument passed with inconsistent data type, requested as {dtype}")
@@ -166,6 +191,8 @@ class QSeries:
 
     @staticmethod
     def none_equality():
+        # Typical pattern for operations that
+        # handle None arithmetic like ==
         if QSeries.allow_none_equality:
             return True
         else:
@@ -173,6 +200,7 @@ class QSeries:
 
     @staticmethod
     def none_inequality():
+        # Typical pattern for comparison operations
         if QSeries.allow_none_comparison:
             return False
         else:
@@ -180,6 +208,7 @@ class QSeries:
 
     @staticmethod
     def compare(val, other_val, operator:str):
+        # To do: For Python >=3.10 use match-case statement
         if operator=='>':
             return val>other_val
         elif operator=='<':
@@ -216,6 +245,17 @@ class QSeries:
             raise(AttributeError("Comparison operator not supported"))
 
     def _get_comparison_data(self, other, operator:str, custom_none:Tuple=tuple())->Tuple[List,str]:
+        """
+        :param operator: Symbol to be used in compare method
+
+        :param custom_none: Tuple of length 2 showing how the defined function,
+        say @, behaves for None @ None, x @ None. Ex.(None,None),(True,None) etc.
+
+        :return: Tuple[
+                    data:List the value of the operator applied to all entries. ,
+                    name:str a predifined name for the new series
+                    ]
+        """
         data = []
         if len(custom_none)==2:
             assert all([isinstance(e,(bool,type(None))) for e in custom_none])
@@ -240,7 +280,7 @@ class QSeries:
 
         elif self.dtype in QSeries._HANDLED_DTYPES and type(other) in QSeries._HANDLED_DTYPES:
             assert self.dtype == type(other)
-            name = f"{self.name} {operator} {type(other)}"
+            name = f"{self.name} {operator} {self.type()}"
             for val in self.values:
                 cond =[type(val)==type(None), type(other)==type(None)]
                 if(all(cond)):
@@ -255,19 +295,38 @@ class QSeries:
 
         return data, name
 
+    def render(self):
+        """
+        Use a specialized table visualisation tool. Only work within Jupyter Notebooks. To allow rendering:
+        QFrame.HTML=True
+        series.render()
+        """
+        if QSeries.HTML:
+            table = go.Figure(data=[go.Table(
+                header={"values": ["Idx", self.name],"fill_color":'lightblue', "align":'center'},
+                cells={"values": [self.index, self.values],"fill_color":'lavender', "align":'center'}
+            )])
+            table.update_layout(
+                margin=dict(l=20, r=20, t=20, b=20),
+                paper_bgcolor="LightSteelBlue",
+            )
+            display(HTML(table.to_html()))
+        else:
+            warnings.warn("Rendering only possible when using Jupyter Notebook")
+
     def __repr__(self):
         out= repr(self.name) + "\n__________________\n"
         for id, val in zip(self.index,self.values):
             out = out + f"|  {id}   |  {val}  |\n" + "__________________\n"
 
-        out=out + "dtype: " + str(self.dtype)
+        out=out + "dtype: " + self.type()
         return out
 
     def __len__(self):
         return len(self.index)
 
     def __add__(self, other):
-        assert self.dtype in {float,int}
+        assert self.dtype in {float,int,str}
         data, name = self._get_comparison_data( other,"+",(None,None) )
         return QSeries(
             data=data,
@@ -287,7 +346,7 @@ class QSeries:
         )
 
     def __mul__(self, other):
-        assert self.dtype in {float, int}
+        assert self.dtype in {float, int, str}
         data, name = self._get_comparison_data( other,"*",(None,None) )
         return QSeries(
             data=data,
@@ -318,8 +377,6 @@ class QSeries:
 
     def __and__(self, other):
         assert self.dtype==bool
-        assert other.dtype==bool
-        assert self.index==other.index
         data, name = self._get_comparison_data(other,"&",custom_none=(self.none_inequality(),self.none_inequality()))
 
         return QSeries(
@@ -331,8 +388,6 @@ class QSeries:
 
     def __or__(self, other):
         assert self.dtype==bool
-        assert other.dtype==bool
-        assert self.index==other.index
         data, name = self._get_comparison_data(other,"|",custom_none=(self.none_equality(),self.none_equality()))
         return QSeries(
             data=data,
@@ -343,8 +398,6 @@ class QSeries:
 
     def __xor__(self, other):
         assert self.dtype==bool
-        assert other.dtype==bool
-        assert self.index == other.index
         data, name = self._get_comparison_data(other,"^",custom_none=(None,None))
         return QSeries(
             data=data,
@@ -424,6 +477,12 @@ class QSeries:
         )
 
     def __getitem__(self, item):
+        """
+        :param item:
+            - If item is int, it returns the (i+1)th element in the series(irrespective of indexing names)
+             If item is a boolean QSeries(condition), it returns a new QSeries with all the entries from the
+            original series that correspond to True in the condition series
+        """
         if isinstance(item, int):
             # Choose if the access index remains circular,
             # within the original range or matched with

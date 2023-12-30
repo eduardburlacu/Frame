@@ -23,5 +23,9 @@ class MyTestCase(unittest.TestCase):
         assert ~f == t
         assert ~(t&f) == ((~t) | (~f)) #From De Morgan
 
+    def test_render(self):
+        t = QSeries(data=[True for _ in range(50)], dtype=bool, name="alltrue")
+        t.render()
+
 if __name__ == '__main__':
     unittest.main()
