@@ -5,17 +5,6 @@ This package provides a simplified implementation of a DataFrame, a tabular data
 
 This version is limited to read/ create operations, but provides a more robust approach to dealing with missing data. The QSeries defines an expected behaviour for dealing with None for each operation supportable. This is important, as we are able to use data as expected without any surprising loss due to the generic NaN format of Pandas. For example, one might argue that the operation None&True should yield true, as it is invariant on the missing value, while a+None is ambiguous.
 
-## Limitations
-We now address the questions in the assessment file.
-
-**"We encourage you to use python lists and normal for loops for all internal data processing operations."**
-
-*Why it comes with performance issues:* Using Python-native data structures is slow because it is an interpreted language. This can create problems for handling large datasets and is inefficient in terms of concurrency, lists being inherently sequential.
-
-*How to improve performance:* The solution is using/creating arrays that support vectorization. Dealing with None entries can be done by using masked arrays. This can be done by:
-
-Using Cython to compile Python-like code into C/C++ leverages the high-performance benefits during data processing in DataFrame operations. A such example are the numpy masked arrays. The fastest solution would be using the numpy.ma module instead of lists.
-
 ## What is next? To-do list
 
 1. Changing lists with masked arrays. The functions that would need to be rewritten are:
